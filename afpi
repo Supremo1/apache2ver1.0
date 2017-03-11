@@ -1,0 +1,93 @@
+#!/bin/bash
+
+###############################################################################
+# Apache2 Forward Proxy Installer (AFPI)                                      #
+# Version: 1.0 Build 2017                                                     #
+# Branch: Stable                                                              #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Author: Guardoo (© 2017)                                                    #
+# License: MIT License                                                        #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# GitHub Repo: https://github.com/Guardoo/apache2-forward-proxy-installer     #
+# AFPI Wiki: https://github.com/Guardoo/apache2-forward-proxy-installer/wiki  #
+###############################################################################
+
+# Declaring a few misc variables
+vafpiversion=1.0 # AFPI version
+vafpibuild=2017 # AFPI build number
+vbranch=Stable # AFPI build branch
+
+# Function for Ubuntu
+ubt ()	{
+	# Updating system packages
+	apt-get update
+	# Installing necessary packages (apache2, apache2-utils for webserver, htpassword and dependencies)
+	apt-get install apache2 apache2-utils -y
+	# Enable Apache2 Proxy Mods
+	a2enmod proxy
+	a2enmod proxy_http
+	a2enmod proxy_connect
+	# Asking user to set a username via read and writing it into $usrn
+	read -e -p "Please enter your desired Username: " usrn
+	# Creating user with username from $usrn and asking user to set a password
+	htpasswd -c /etc/apache2/.htpasswd $usrn
+	# Opening desired Apache2 Proxy port for clients to connect
+	iptables -I INPUT -p tcp --dport 1445 -j ACCEPT
+	# Saving firewall rules
+	iptables-save
+	# Add Apache2 Sites configuration
+	echo -e '<VirtualHost *:1445>\nServerName proxy\n# Enable forward proxy\nProxyRequests On\n# Add "Via" header\nProxyVia On\n\n<Proxy *>\n  # Allow access from any network\n  Require all granted\n</Proxy>\n\n# Enable Error and Access log\nErrorLog "/var/log/apache2/proxy-error.log"\nCustomLog "/var/log/apache2/proxy-access.log" common\n</VirtualHost>' > /etc/apache2/sites-available/forward_proxy.conf
+	# Add Apache2 Proxy port to Ports configuration
+	sed -i '6i Listen 1445\n' /etc/apache2/ports.conf
+	# Enable forward_proxy.conf
+	a2ensite forward_proxy.conf
+	# Disable default Apache2 Configuration
+	a2dissite 000-default.conf
+	# Add Apache2 Proxy Mod Configuration 
+	echo -e '<IfModule mod_proxy.c>\n\tProxyRequests On\n\t<Proxy *>\n\t   Require all granted\n\t   Require local\n\t</Proxy>\n</IfModule>' > /etc/apache2/mods-enabled/proxy.conf
+	# Restarting Apache2 and enabling its service
+	service apache2 restart
+	# Finish Message
+	echo -e "\x1b[1;32m[S]uccess - The Apache2 Forward Proxy Installer is ready to use. Enjoy ;-)\e[0m"
+}
+
+# Function to add new Usernames
+add ()	{
+	# Asking user to set a username via read and writing it into $usradd
+	read -e -p "Please enter your desired Username: " usradd
+	# Creating user with username from $usradd and asking user to set a password
+	htpasswd -c /etc/apache2/.htpasswd $usradd
+	# Finish Message
+	echo -e "\x1b[1;32m[S]uccess - The Proxy Account with username '"$usradd"' has been added to the system.\e[0m"
+}
+
+# Default function with information
+dinfo ()	{
+	echo "Apache2 Forward Proxy Installer $vafpiversion Build $vafpibuild"
+	echo "You are using builds from the $vbranch branch"
+	echo ""
+	echo "Usage: bash afpi <option>"
+	echo "Example (Ubuntu): bash afpi -ubuntu"
+	echo ""
+	echo "Options:"
+	echo "-ubuntu  -- Ubuntu"
+	echo ""
+	echo "-adduser  -- Add new Usernames"
+	echo ""
+	echo ""
+	echo "More OS Support coming soon."
+	echo ""
+	echo "(C) 2017 by Guardoo"
+	echo "GitHub Repo: https://github.com/Guardoo/apache2-forward-proxy-installer"
+	echo "AFPI Wiki: https://github.com/Guardoo/apache2-forward-proxy-installer/wiki"
+}
+
+# Checking $1 and running corresponding function
+case $1 in
+	'-ubuntu') # If option "-ubuntu" run function ubt
+		ubt;; # Ubuntu
+	'-adduser') # If option "-adduser" run function add
+		add;; # Add new Usernames
+	*) # If option empty or non existing run function info
+		dinfo;; # Default, information about available options
+esac
